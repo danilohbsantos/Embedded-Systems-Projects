@@ -1,8 +1,9 @@
 /**
-*  Project: Stepper Motor Driver with RL78 Hardware 16-Bit Single-Chip Microcontrollers
-*  Autors: Danilo H. B. Santos and Felipe Gomes
-*  Professor: 
-*  NEA630 - Microprocessors
+*  Project: Stepper Motor Driver using RL78 Hardware 16-Bit Single-Chip Microcontrollers (MCUs)
+*  Environment: IAR Embedded Workbench IDE
+*  Authors: Danilo H. B. Santos and Felipe Gomes
+*  Professor: Prof. Dr. Marco Antônio Assis de Melo
+*  EL9630/NEA630 - Microprocessors
 *  Device RL78 - R5F100LE - 32 Bits 
 */
 
@@ -11,19 +12,19 @@
 #include "intrinsics.h"
 #include "myRL78.h"
 
-// Configura watchdog = desligado
+// Watchdog config = Turn-off
 #pragma location = "OPTBYTE"
 __root __far const char opbyte0 = WDT_OFF; 
-// Configura detector de baixa tensão = desligado
+// Low-voltage detector config = desligado
 #pragma location = "OPTBYTE"
 __root __far const char opbyte1 = LVD_OFF; 
-// oscilador 32MHz flash high speed
+// Oscilator 32MHz flash high speed
 #pragma location = "OPTBYTE"
 __root __far const char opbyte2 = FLASH_HS | CLK_32MHZ;
-// debug ativado, com apagamento em caso de falha de autenticação
+// Debug activated, with erasure in case of authentication failure
 #pragma location = "OPTBYTE"
 __root __far const char opbyte3 = DEBUG_ON_ERASE; 
-/* Configura security ID */
+/* Security ID config */
 #pragma location = "SECUID"
 __root __far const char senha[10] = {0,0,0,0,0,0,0,0,0,0};
 
@@ -121,7 +122,7 @@ void main(void)
 {
   ADPC = 4; //Configura o pino do ADC
   ADCEN = 1; //Liga o ADC
-  ADM0 = ADCLK_DIV64 | ADC_LV0 | bADCE; //Configura o ADC
+  ADM0 = ADCLK_DIV64 | ADC_LV0 | bADCE; // Configura o ADC
   ADM1 = ADC_TRIG_SOFT;
   ADS = ADC_CH2;
   ADMK = 0;

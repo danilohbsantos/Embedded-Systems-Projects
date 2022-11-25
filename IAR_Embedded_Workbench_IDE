@@ -1,0 +1,163 @@
+/**
+*  Project: Stepper Motor Driver with RL78 Hardware 16-Bit Single-Chip Microcontrollers
+*  Autors: Danilo H. B. Santos and Felipe Gomes
+*  Professor: 
+*  NEA630 - Microprocessors
+*  Device RL78 - R5F100LE - 32 Bits 
+*/
+
+#include "ior5f100le.h"
+#include "ior5f100le_ext.h"
+#include "intrinsics.h"
+#include "myRL78.h"
+
+// Configura watchdog = desligado
+#pragma location = "OPTBYTE"
+__root __far const char opbyte0 = WDT_OFF; 
+// Configura detector de baixa tensão = desligado
+#pragma location = "OPTBYTE"
+__root __far const char opbyte1 = LVD_OFF; 
+// oscilador 32MHz flash high speed
+#pragma location = "OPTBYTE"
+__root __far const char opbyte2 = FLASH_HS | CLK_32MHZ;
+// debug ativado, com apagamento em caso de falha de autenticação
+#pragma location = "OPTBYTE"
+__root __far const char opbyte3 = DEBUG_ON_ERASE; 
+/* Configura security ID */
+#pragma location = "SECUID"
+__root __far const char senha[10] = {0,0,0,0,0,0,0,0,0,0};
+
+#define P P1_bit.no0
+#define D P1_bit.no1
+
+unsigned int valor_time = 1454;
+int enable = 1;
+
+void conta_tempo(int teempo) //1454 = 100 Hz
+{
+  //volatile long int temp;
+  volatile unsigned long int temp, cnt;
+  for (temp=teempo;temp;temp--);
+}
+
+
+void seta_enrolamentos(int e1, int e2, int e3, int e4){
+  P7_bit.no0 = e1; //Enrolamento 1
+  P7_bit.no1 = e2; //Enrolamento 2
+  P7_bit.no2 = e3; //Enrolamento 3
+  P7_bit.no3 = e4; //Enrolamento 4
+  conta_tempo(valor_time); 
+}
+
+#pragma vector = INTAD_vect // Configuração para criação da função de interrupção de AD do microcontrolador
+__interrupt void trata_ADC(){ //Interrup
+  unsigned int result;
+  result = ADCR >> 6; // Realização do shift de 6 bits a direita para ler a informação
+  valor_time = result*1.5 + 1454;
+  //A variavel "valor_time" controla o tempo do delay de acionamento dos enrolamentos
+  //Temos uma frequencia de operação aproximada entre 1000 Hz e 486 Hz, quanto maior a frequencia, maior a velocidade do motor
+  //A velocidade do motor ficou: 6 <-> 12.5 RPM em Meio passo | 12 <-> 25.3 RPM em Passo completo
+  //Range de frequencias adotado baseado em testes do que o motor aceita
+}
+
+#pragma vector = INTIT_vect
+__interrupt void trata_IT(void) //Interrupcao Timer, verifica o estado dos botões a cada 200us
+{
+  if(enable==1){
+    switch (P) {
+      case 0:
+        switch (D)  {
+        case 0:
+            seta_enrolamentos(1,0,0,0); // Passo Inteiro, sentido Horário.
+            seta_enrolamentos(0,1,0,0);
+            seta_enrolamentos(0,0,1,0);
+            seta_enrolamentos(0,0,0,1);  
+            break;
+          case 1:
+            seta_enrolamentos(0,0,0,1);  // Passo Inteiro, sentido anti-Horário.
+            seta_enrolamentos(0,0,1,0);
+            seta_enrolamentos(0,1,0,0);
+            seta_enrolamentos(1,0,0,0);
+            break;
+        }
+        break;
+        
+        case 1:
+        switch (D)  {
+        case 0: // Meio Passo, sentido Horário.	
+            seta_enrolamentos(1,0,0,0);
+            seta_enrolamentos(1,1,0,0);
+            seta_enrolamentos(0,1,0,0);
+            seta_enrolamentos(0,1,1,0);
+            seta_enrolamentos(0,0,1,0);
+            seta_enrolamentos(0,0,1,1);
+            seta_enrolamentos(0,0,0,1);
+            seta_enrolamentos(1,0,0,1);
+            break;
+          case 1: // Meio Passo, sentido anti-Horário.	
+            seta_enrolamentos(1,0,0,1); 
+            seta_enrolamentos(0,0,0,1);
+            seta_enrolamentos(0,0,1,1);
+            seta_enrolamentos(0,0,1,0);
+            seta_enrolamentos(0,1,1,0);
+            seta_enrolamentos(0,1,0,0);
+            seta_enrolamentos(1,1,0,0);
+            seta_enrolamentos(1,0,0,0);
+            break;
+        }
+        break;
+    }
+ }
+}
+
+#pragma vector = INTP1_vect
+__interrupt void trata_INTP1(){
+  enable = !enable;
+  seta_enrolamentos(0,0,0,0);
+  conta_tempo(10000);
+}
+
+void main(void)
+{
+  ADPC = 4; //Configura o pino do ADC
+  ADCEN = 1; //Liga o ADC
+  ADM0 = ADCLK_DIV64 | ADC_LV0 | bADCE; //Configura o ADC
+  ADM1 = ADC_TRIG_SOFT;
+  ADS = ADC_CH2;
+  ADMK = 0;
+  ADCS = 1;
+  
+  
+  CMC = 0; // desativa osciladores X1 e XT1
+  OSMC = bWUTMMCK0;  // configura o LOCO (15kHz) como fonte de clock do IT/RTC
+  RTCEN = 1; 
+  // Configura o IT para uma interrupção a cada 300 contagens, ou seja:
+  // 3/15000 = 200us -> uma interrupção a cada 200us
+  ITMC = bRINTE | 1;
+  ITMK = 0; 
+  
+  
+  EGN0 = BIT2 | BIT1;
+  PIF1 = 0;
+  //PIF2 = 0;
+  PMK1 = 0;
+  //PMK2 = 0;
+  
+  
+  PM1_bit.no0 = 1; //Passo -> 1 = Meio passo / 0 = Passo Inteiro 
+  PM1_bit.no1 = 1; //Direcao -> 1 = Antihorario / 0 = Horario 
+  
+  PM7_bit.no0 = 0; 
+  PM7_bit.no1 = 0; 
+  PM7_bit.no2 = 0; 
+  PM7_bit.no3 = 0; 
+  
+  P7_bit.no0 = 1; //Enrolamento 1
+  P7_bit.no1 = 1; //Enrolamento 2
+  P7_bit.no2 = 1; //Enrolamento 3
+  P7_bit.no2 = 1; //Enrolamento 4
+  
+ 
+  __enable_interrupt();
+  while(1);
+}
